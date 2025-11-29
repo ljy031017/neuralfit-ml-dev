@@ -1,0 +1,2126 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "gpuType": "T4"
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    },
+    "accelerator": "GPU"
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Extra - Seed 고정"
+      ],
+      "metadata": {
+        "id": "tGX1RPmqGOyY"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# 1) Seed 고정 코드\n",
+        "\n",
+        "import torch, random, numpy as np, os\n",
+        "\n",
+        "seed = 42\n",
+        "\n",
+        "# Python 기본 random\n",
+        "random.seed(seed)\n",
+        "\n",
+        "# numpy random\n",
+        "np.random.seed(seed)\n",
+        "\n",
+        "# PyTorch random\n",
+        "torch.manual_seed(seed)\n",
+        "torch.cuda.manual_seed_all(seed)\n",
+        "\n",
+        "# 🔥 deterministic 완전히 OFF (Transformer GPU에서 필수)\n",
+        "torch.use_deterministic_algorithms(False)\n",
+        "\n",
+        "print(\"Seed fixed:\", seed)\n",
+        "\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "8vAPRTy0GKNp",
+        "outputId": "ac9f5271-d397-4609-e6fb-170e4da11ae5"
+      },
+      "execution_count": 16,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Seed fixed: 42\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Step 2 – Baseline Transformer 학습 준비"
+      ],
+      "metadata": {
+        "id": "SbEZ7bs-VVN8"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Part 1 — Load + 기본 세팅\n",
+        "\n",
+        "import pandas as pd\n",
+        "import numpy as np\n",
+        "\n",
+        "# Step1 결과 파일 로드\n",
+        "DATA_PATH = \"/content/1ADNIMERGE_step1_minimal_filtered_float.csv\"\n",
+        "df = pd.read_csv(DATA_PATH)\n",
+        "\n",
+        "print(\"Step1 로드 완료:\", df.shape)\n",
+        "df.head()\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 244
+        },
+        "id": "MdFqBkUpVXfa",
+        "outputId": "364c1204-5fb4-4a10-c2c0-3a8a54cbd1a2"
+      },
+      "execution_count": 17,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Step1 로드 완료: (16077, 17)\n"
+          ]
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "   RID  DX_bl  ABETA  PTAU  ADAS13  MMSE  LDELTOTAL  MOCA  DX  ADAS13_bl  \\\n",
+              "0    2    NaN    NaN   NaN   18.67  28.0       10.0   NaN NaN      18.67   \n",
+              "1    2    NaN    NaN   NaN   19.67  28.0        NaN   NaN NaN      18.67   \n",
+              "2    2    NaN    NaN   NaN   20.00  29.0       13.0   NaN NaN      18.67   \n",
+              "3    2    NaN    NaN   NaN   23.00  28.0       12.0  23.0 NaN      18.67   \n",
+              "4    2    NaN    NaN   NaN     NaN   NaN        NaN   NaN NaN      18.67   \n",
+              "\n",
+              "   MMSE_bl  FAQ_bl  EcogPtMem_bl  EcogPtTotal_bl  ABETA_bl  PTAU_bl  Month  \n",
+              "0     28.0     0.0           NaN             NaN       NaN      NaN      0  \n",
+              "1     28.0     0.0           NaN             NaN       NaN      NaN      6  \n",
+              "2     28.0     0.0           NaN             NaN       NaN      NaN     36  \n",
+              "3     28.0     0.0           NaN             NaN       NaN      NaN     60  \n",
+              "4     28.0     0.0           NaN             NaN       NaN      NaN     66  "
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-475f980a-e2bc-49e7-a8ae-d61c4fb2ebf1\" class=\"colab-df-container\">\n",
+              "    <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>RID</th>\n",
+              "      <th>DX_bl</th>\n",
+              "      <th>ABETA</th>\n",
+              "      <th>PTAU</th>\n",
+              "      <th>ADAS13</th>\n",
+              "      <th>MMSE</th>\n",
+              "      <th>LDELTOTAL</th>\n",
+              "      <th>MOCA</th>\n",
+              "      <th>DX</th>\n",
+              "      <th>ADAS13_bl</th>\n",
+              "      <th>MMSE_bl</th>\n",
+              "      <th>FAQ_bl</th>\n",
+              "      <th>EcogPtMem_bl</th>\n",
+              "      <th>EcogPtTotal_bl</th>\n",
+              "      <th>ABETA_bl</th>\n",
+              "      <th>PTAU_bl</th>\n",
+              "      <th>Month</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>0</th>\n",
+              "      <td>2</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>18.67</td>\n",
+              "      <td>28.0</td>\n",
+              "      <td>10.0</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>18.67</td>\n",
+              "      <td>28.0</td>\n",
+              "      <td>0.0</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>0</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>1</th>\n",
+              "      <td>2</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>19.67</td>\n",
+              "      <td>28.0</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>18.67</td>\n",
+              "      <td>28.0</td>\n",
+              "      <td>0.0</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>6</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2</th>\n",
+              "      <td>2</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>20.00</td>\n",
+              "      <td>29.0</td>\n",
+              "      <td>13.0</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>18.67</td>\n",
+              "      <td>28.0</td>\n",
+              "      <td>0.0</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>36</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>3</th>\n",
+              "      <td>2</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>23.00</td>\n",
+              "      <td>28.0</td>\n",
+              "      <td>12.0</td>\n",
+              "      <td>23.0</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>18.67</td>\n",
+              "      <td>28.0</td>\n",
+              "      <td>0.0</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>60</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>4</th>\n",
+              "      <td>2</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>18.67</td>\n",
+              "      <td>28.0</td>\n",
+              "      <td>0.0</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>NaN</td>\n",
+              "      <td>66</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>\n",
+              "    <div class=\"colab-df-buttons\">\n",
+              "\n",
+              "  <div class=\"colab-df-container\">\n",
+              "    <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-475f980a-e2bc-49e7-a8ae-d61c4fb2ebf1')\"\n",
+              "            title=\"Convert this dataframe to an interactive table.\"\n",
+              "            style=\"display:none;\">\n",
+              "\n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\" viewBox=\"0 -960 960 960\">\n",
+              "    <path d=\"M120-120v-720h720v720H120Zm60-500h600v-160H180v160Zm220 220h160v-160H400v160Zm0 220h160v-160H400v160ZM180-400h160v-160H180v160Zm440 0h160v-160H620v160ZM180-180h160v-160H180v160Zm440 0h160v-160H620v160Z\"/>\n",
+              "  </svg>\n",
+              "    </button>\n",
+              "\n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-buttons div {\n",
+              "      margin-bottom: 4px;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "    <script>\n",
+              "      const buttonEl =\n",
+              "        document.querySelector('#df-475f980a-e2bc-49e7-a8ae-d61c4fb2ebf1 button.colab-df-convert');\n",
+              "      buttonEl.style.display =\n",
+              "        google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "      async function convertToInteractive(key) {\n",
+              "        const element = document.querySelector('#df-475f980a-e2bc-49e7-a8ae-d61c4fb2ebf1');\n",
+              "        const dataTable =\n",
+              "          await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                    [key], {});\n",
+              "        if (!dataTable) return;\n",
+              "\n",
+              "        const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "          '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "          + ' to learn more about interactive tables.';\n",
+              "        element.innerHTML = '';\n",
+              "        dataTable['output_type'] = 'display_data';\n",
+              "        await google.colab.output.renderOutput(dataTable, element);\n",
+              "        const docLink = document.createElement('div');\n",
+              "        docLink.innerHTML = docLinkHtml;\n",
+              "        element.appendChild(docLink);\n",
+              "      }\n",
+              "    </script>\n",
+              "  </div>\n",
+              "\n",
+              "\n",
+              "    <div id=\"df-d06a5925-cdaf-4ef7-b224-20be6eedb33e\">\n",
+              "      <button class=\"colab-df-quickchart\" onclick=\"quickchart('df-d06a5925-cdaf-4ef7-b224-20be6eedb33e')\"\n",
+              "                title=\"Suggest charts\"\n",
+              "                style=\"display:none;\">\n",
+              "\n",
+              "<svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\"viewBox=\"0 0 24 24\"\n",
+              "     width=\"24px\">\n",
+              "    <g>\n",
+              "        <path d=\"M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z\"/>\n",
+              "    </g>\n",
+              "</svg>\n",
+              "      </button>\n",
+              "\n",
+              "<style>\n",
+              "  .colab-df-quickchart {\n",
+              "      --bg-color: #E8F0FE;\n",
+              "      --fill-color: #1967D2;\n",
+              "      --hover-bg-color: #E2EBFA;\n",
+              "      --hover-fill-color: #174EA6;\n",
+              "      --disabled-fill-color: #AAA;\n",
+              "      --disabled-bg-color: #DDD;\n",
+              "  }\n",
+              "\n",
+              "  [theme=dark] .colab-df-quickchart {\n",
+              "      --bg-color: #3B4455;\n",
+              "      --fill-color: #D2E3FC;\n",
+              "      --hover-bg-color: #434B5C;\n",
+              "      --hover-fill-color: #FFFFFF;\n",
+              "      --disabled-bg-color: #3B4455;\n",
+              "      --disabled-fill-color: #666;\n",
+              "  }\n",
+              "\n",
+              "  .colab-df-quickchart {\n",
+              "    background-color: var(--bg-color);\n",
+              "    border: none;\n",
+              "    border-radius: 50%;\n",
+              "    cursor: pointer;\n",
+              "    display: none;\n",
+              "    fill: var(--fill-color);\n",
+              "    height: 32px;\n",
+              "    padding: 0;\n",
+              "    width: 32px;\n",
+              "  }\n",
+              "\n",
+              "  .colab-df-quickchart:hover {\n",
+              "    background-color: var(--hover-bg-color);\n",
+              "    box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "    fill: var(--button-hover-fill-color);\n",
+              "  }\n",
+              "\n",
+              "  .colab-df-quickchart-complete:disabled,\n",
+              "  .colab-df-quickchart-complete:disabled:hover {\n",
+              "    background-color: var(--disabled-bg-color);\n",
+              "    fill: var(--disabled-fill-color);\n",
+              "    box-shadow: none;\n",
+              "  }\n",
+              "\n",
+              "  .colab-df-spinner {\n",
+              "    border: 2px solid var(--fill-color);\n",
+              "    border-color: transparent;\n",
+              "    border-bottom-color: var(--fill-color);\n",
+              "    animation:\n",
+              "      spin 1s steps(1) infinite;\n",
+              "  }\n",
+              "\n",
+              "  @keyframes spin {\n",
+              "    0% {\n",
+              "      border-color: transparent;\n",
+              "      border-bottom-color: var(--fill-color);\n",
+              "      border-left-color: var(--fill-color);\n",
+              "    }\n",
+              "    20% {\n",
+              "      border-color: transparent;\n",
+              "      border-left-color: var(--fill-color);\n",
+              "      border-top-color: var(--fill-color);\n",
+              "    }\n",
+              "    30% {\n",
+              "      border-color: transparent;\n",
+              "      border-left-color: var(--fill-color);\n",
+              "      border-top-color: var(--fill-color);\n",
+              "      border-right-color: var(--fill-color);\n",
+              "    }\n",
+              "    40% {\n",
+              "      border-color: transparent;\n",
+              "      border-right-color: var(--fill-color);\n",
+              "      border-top-color: var(--fill-color);\n",
+              "    }\n",
+              "    60% {\n",
+              "      border-color: transparent;\n",
+              "      border-right-color: var(--fill-color);\n",
+              "    }\n",
+              "    80% {\n",
+              "      border-color: transparent;\n",
+              "      border-right-color: var(--fill-color);\n",
+              "      border-bottom-color: var(--fill-color);\n",
+              "    }\n",
+              "    90% {\n",
+              "      border-color: transparent;\n",
+              "      border-bottom-color: var(--fill-color);\n",
+              "    }\n",
+              "  }\n",
+              "</style>\n",
+              "\n",
+              "      <script>\n",
+              "        async function quickchart(key) {\n",
+              "          const quickchartButtonEl =\n",
+              "            document.querySelector('#' + key + ' button');\n",
+              "          quickchartButtonEl.disabled = true;  // To prevent multiple clicks.\n",
+              "          quickchartButtonEl.classList.add('colab-df-spinner');\n",
+              "          try {\n",
+              "            const charts = await google.colab.kernel.invokeFunction(\n",
+              "                'suggestCharts', [key], {});\n",
+              "          } catch (error) {\n",
+              "            console.error('Error during call to suggestCharts:', error);\n",
+              "          }\n",
+              "          quickchartButtonEl.classList.remove('colab-df-spinner');\n",
+              "          quickchartButtonEl.classList.add('colab-df-quickchart-complete');\n",
+              "        }\n",
+              "        (() => {\n",
+              "          let quickchartButtonEl =\n",
+              "            document.querySelector('#df-d06a5925-cdaf-4ef7-b224-20be6eedb33e button');\n",
+              "          quickchartButtonEl.style.display =\n",
+              "            google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "        })();\n",
+              "      </script>\n",
+              "    </div>\n",
+              "\n",
+              "    </div>\n",
+              "  </div>\n"
+            ],
+            "application/vnd.google.colaboratory.intrinsic+json": {
+              "type": "dataframe",
+              "variable_name": "df",
+              "summary": "{\n  \"name\": \"df\",\n  \"rows\": 16077,\n  \"fields\": [\n    {\n      \"column\": \"RID\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 2201,\n        \"min\": 2,\n        \"max\": 7088,\n        \"num_unique_values\": 2209,\n        \"samples\": [\n          2205,\n          5083,\n          4929\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"DX_bl\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": null,\n        \"min\": null,\n        \"max\": null,\n        \"num_unique_values\": 0,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"ABETA\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 461.07328473278193,\n        \"min\": 200.0,\n        \"max\": 1700.0,\n        \"num_unique_values\": 1694,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"PTAU\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 14.278504941331567,\n        \"min\": 8.0,\n        \"max\": 103.7,\n        \"num_unique_values\": 1764,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"ADAS13\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 11.503532035454699,\n        \"min\": 0.0,\n        \"max\": 85.0,\n        \"num_unique_values\": 209,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"MMSE\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 3.8966092862927892,\n        \"min\": 0.0,\n        \"max\": 30.0,\n        \"num_unique_values\": 31,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"LDELTOTAL\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 6.2126253385668635,\n        \"min\": 0.0,\n        \"max\": 25.0,\n        \"num_unique_values\": 26,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"MOCA\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 4.677902296326977,\n        \"min\": 0.0,\n        \"max\": 30.0,\n        \"num_unique_values\": 31,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"DX\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": null,\n        \"min\": null,\n        \"max\": null,\n        \"num_unique_values\": 0,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"ADAS13_bl\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 8.573858277293786,\n        \"min\": 0.0,\n        \"max\": 54.67,\n        \"num_unique_values\": 142,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"MMSE_bl\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 2.3396170859193384,\n        \"min\": 16.0,\n        \"max\": 30.0,\n        \"num_unique_values\": 15,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"FAQ_bl\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 5.231155950596258,\n        \"min\": 0.0,\n        \"max\": 30.0,\n        \"num_unique_values\": 31,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"EcogPtMem_bl\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 0.7225396868530528,\n        \"min\": 1.0,\n        \"max\": 4.0,\n        \"num_unique_values\": 45,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"EcogPtTotal_bl\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 0.5306339926514261,\n        \"min\": 1.0,\n        \"max\": 3.85294,\n        \"num_unique_values\": 295,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"ABETA_bl\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 464.23829909546674,\n        \"min\": 200.0,\n        \"max\": 1700.0,\n        \"num_unique_values\": 929,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"PTAU_bl\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 13.297850837165544,\n        \"min\": 8.0,\n        \"max\": 103.0,\n        \"num_unique_values\": 1028,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"Month\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 35,\n        \"min\": 0,\n        \"max\": 204,\n        \"num_unique_values\": 36,\n        \"samples\": [],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    }\n  ]\n}"
+            }
+          },
+          "metadata": {},
+          "execution_count": 17
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Part 2 — RID 기반 Train/Val/Test Split\n",
+        "\n",
+        "from sklearn.model_selection import train_test_split\n",
+        "\n",
+        "# 전체 환자 리스트\n",
+        "all_rids = df[\"RID\"].unique()\n",
+        "print(\"전체 환자 수:\", len(all_rids))\n",
+        "\n",
+        "# Train / Temp (Val+Test)\n",
+        "train_rids, temp_rids = train_test_split(\n",
+        "    all_rids, test_size=0.30, random_state=42\n",
+        ")\n",
+        "\n",
+        "# Val / Test\n",
+        "val_rids, test_rids = train_test_split(\n",
+        "    temp_rids, test_size=0.50, random_state=42\n",
+        ")\n",
+        "\n",
+        "print(\"Train RID 수:\", len(train_rids))\n",
+        "print(\"Val RID 수:\", len(val_rids))\n",
+        "print(\"Test RID 수:\", len(test_rids))\n",
+        "\n",
+        "# Split된 RID 기준으로 row 분리\n",
+        "df_train = df[df[\"RID\"].isin(train_rids)].reset_index(drop=True)\n",
+        "df_val   = df[df[\"RID\"].isin(val_rids)].reset_index(drop=True)\n",
+        "df_test  = df[df[\"RID\"].isin(test_rids)].reset_index(drop=True)\n",
+        "\n",
+        "print(df_train.shape, df_val.shape, df_test.shape)\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "5Wd_NzyCVbC4",
+        "outputId": "11dab3c5-1cea-47b5-cd86-069a1b3a27f8"
+      },
+      "execution_count": 18,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "전체 환자 수: 2209\n",
+            "Train RID 수: 1546\n",
+            "Val RID 수: 331\n",
+            "Test RID 수: 332\n",
+            "(11304, 17) (2395, 17) (2378, 17)\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Part 3 — Anchor 시점 생성 (baseline anchor = Month=0)\n",
+        "# ✔ 환자별 baseline row 추출, anchor row는 Month=0만 사용.\n",
+        "\n",
+        "# baseline anchor 추출 함수\n",
+        "def get_baseline_anchors(df_split):\n",
+        "    anchors = df_split[df_split[\"Month\"] == 0].copy()\n",
+        "    print(\"baseline anchor 수:\", anchors.shape[0])\n",
+        "    return anchors\n",
+        "\n",
+        "train_anchor = get_baseline_anchors(df_train)\n",
+        "val_anchor   = get_baseline_anchors(df_val)\n",
+        "test_anchor  = get_baseline_anchors(df_test)\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "Xcm6TJNLVcAn",
+        "outputId": "e7329757-d08e-4cf4-b613-b098a67f93ba"
+      },
+      "execution_count": 19,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "baseline anchor 수: 1546\n",
+            "baseline anchor 수: 331\n",
+            "baseline anchor 수: 332\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# 4-1. 12개월 후 row lookup 함수\n",
+        "def get_12m_followup(df_split):\n",
+        "    # 12개월 row만 추출\n",
+        "    follow_12 = df_split[df_split[\"Month\"] == 12][[\"RID\",\"MMSE\",\"ADAS13\",\"DX\"]]\n",
+        "    follow_12 = follow_12.rename(columns={\n",
+        "        \"MMSE\": \"MMSE_12m\",\n",
+        "        \"ADAS13\": \"ADAS13_12m\",\n",
+        "        \"DX\": \"DX_12m\"\n",
+        "    })\n",
+        "    return follow_12\n",
+        "\n",
+        "train_12m = get_12m_followup(df_train)\n",
+        "val_12m   = get_12m_followup(df_val)\n",
+        "test_12m  = get_12m_followup(df_test)"
+      ],
+      "metadata": {
+        "id": "Np2_FYMwVcqR"
+      },
+      "execution_count": 20,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# part 4-2. Anchor + 12m Follow-up Merge\n",
+        "# anchor row에 12개월 후 row를 붙인다.\n",
+        "\n",
+        "def merge_anchor_follow(anchor_df, follow_df):\n",
+        "    merged = anchor_df.merge(follow_df, on=\"RID\", how=\"inner\")  # anchor와 12m 둘 다 존재하는 경우만\n",
+        "    print(\"anchor + 12m merge:\", anchor_df.shape, \"→\", merged.shape)\n",
+        "    return merged\n",
+        "\n",
+        "train_samples = merge_anchor_follow(train_anchor, train_12m)\n",
+        "val_samples   = merge_anchor_follow(val_anchor, val_12m)\n",
+        "test_samples  = merge_anchor_follow(test_anchor, test_12m)\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "APGKyVWsVdOm",
+        "outputId": "e6663d6a-8988-408e-e8af-8221e79923b2"
+      },
+      "execution_count": 21,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "anchor + 12m merge: (1546, 17) → (1357, 20)\n",
+            "anchor + 12m merge: (331, 17) → (301, 20)\n",
+            "anchor + 12m merge: (332, 17) → (295, 20)\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# part 4-3. 전환 여부(conversion label) 생성\n",
+        "# CN baseline → 12m에 MCI/AD 이면 1\n",
+        "# MCI baseline → 12m에 AD 이면 1\n",
+        "# AD baseline → MMSE -3 이하 감소하면 1 (빠른 악화)\n",
+        "\n",
+        "def create_conversion_labels(df):\n",
+        "    labels = []\n",
+        "    for _, row in df.iterrows():\n",
+        "        base_dx = row[\"DX_bl\"]\n",
+        "        dx12 = row[\"DX_12m\"]\n",
+        "\n",
+        "        # CN baseline\n",
+        "        if base_dx == \"CN\":\n",
+        "            conv = 1 if dx12 in [\"MCI\", \"AD\"] else 0\n",
+        "\n",
+        "        # MCI baseline\n",
+        "        elif base_dx == \"MCI\":\n",
+        "            conv = 1 if dx12 == \"AD\" else 0\n",
+        "\n",
+        "        # AD baseline → 빠른 악화 여부\n",
+        "        else:\n",
+        "            try:\n",
+        "                mmse_slope = (row[\"MMSE_12m\"] - row[\"MMSE\"]) / 12\n",
+        "                conv = 1 if mmse_slope < -0.25 else 0  # MMSE -3/year 기준\n",
+        "            except:\n",
+        "                conv = 0\n",
+        "\n",
+        "        labels.append(conv)\n",
+        "\n",
+        "    df[\"conv_12m\"] = labels\n",
+        "    return df\n"
+      ],
+      "metadata": {
+        "id": "aKq3XlCNVeGR"
+      },
+      "execution_count": 22,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# part 4-4. Slope 계산 (연간 변화 속도)\n",
+        "\n",
+        "def calculate_slopes(df):\n",
+        "    df[\"mmse_slope\"] = (df[\"MMSE_12m\"] - df[\"MMSE\"]) / 12\n",
+        "    df[\"adas_slope\"] = (df[\"ADAS13_12m\"] - df[\"ADAS13\"]) / 12\n",
+        "    return df\n",
+        "\n",
+        "train_samples = calculate_slopes(train_samples)\n",
+        "val_samples   = calculate_slopes(val_samples)\n",
+        "test_samples  = calculate_slopes(test_samples)\n"
+      ],
+      "metadata": {
+        "id": "Yxw_qyVUVes5"
+      },
+      "execution_count": 23,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# part 5-1(마무리 코드)\n",
+        "# ① 전환 여부 생성(create_conversion_labels)\n",
+        "\n",
+        "def create_conversion_labels(df):\n",
+        "    labels = []\n",
+        "    for _, row in df.iterrows():\n",
+        "        base_dx = row[\"DX_bl\"]\n",
+        "        dx12 = row[\"DX_12m\"]\n",
+        "\n",
+        "        # CN baseline → MCI/AD\n",
+        "        if base_dx == \"CN\":\n",
+        "            conv = 1 if dx12 in [\"MCI\", \"AD\"] else 0\n",
+        "\n",
+        "        # MCI baseline → AD\n",
+        "        elif base_dx == \"MCI\":\n",
+        "            conv = 1 if dx12 == \"AD\" else 0\n",
+        "\n",
+        "        # AD baseline → 빠른 악화(= MMSE -3/year 이하 감소)\n",
+        "        else:\n",
+        "            try:\n",
+        "                mmse_slope = (row[\"MMSE_12m\"] - row[\"MMSE\"]) / 12\n",
+        "                conv = 1 if mmse_slope < -0.25 else 0\n",
+        "            except:\n",
+        "                conv = 0\n",
+        "\n",
+        "        labels.append(conv)\n",
+        "\n",
+        "    df[\"conv_12m\"] = labels\n",
+        "    return df\n",
+        "\n",
+        "\n",
+        "# 적용\n",
+        "train_samples = create_conversion_labels(train_samples)\n",
+        "val_samples   = create_conversion_labels(val_samples)\n",
+        "test_samples  = create_conversion_labels(test_samples)\n",
+        "\n",
+        "print(\"전환 라벨 생성 완료!\")\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "Kk9WOzGPVfkr",
+        "outputId": "747ad3af-961c-4c86-bd83-01a4f5889eae"
+      },
+      "execution_count": 24,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "전환 라벨 생성 완료!\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# part 5-2(마무리 코드)\n",
+        "# ② slope 계산(calculate_slopes) slope: 시간에 따른 변화 속도(rate of change)\n",
+        "\n",
+        "def calculate_slopes(df):\n",
+        "    df[\"mmse_slope\"] = (df[\"MMSE_12m\"] - df[\"MMSE\"]) / 12\n",
+        "    df[\"adas_slope\"] = (df[\"ADAS13_12m\"] - df[\"ADAS13\"]) / 12\n",
+        "    return df\n",
+        "\n",
+        "train_samples = calculate_slopes(train_samples)\n",
+        "val_samples   = calculate_slopes(val_samples)\n",
+        "test_samples  = calculate_slopes(test_samples)\n",
+        "\n",
+        "print(\"slope 계산 완료!\")\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "bhyEdKftbGSS",
+        "outputId": "cedc2f57-90f2-41b6-9740-dd140ea4524c"
+      },
+      "execution_count": 25,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "slope 계산 완료!\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Step 3 — 시계열 입력(X) 생성 & Dataset/Dataloader"
+      ],
+      "metadata": {
+        "id": "w459lMs1ekdz"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Part 1 — 환자별 전체 시계열 정렬\n",
+        "\n",
+        "import pandas as pd\n",
+        "import numpy as np\n",
+        "\n",
+        "# Step2에서 만든 train/val/test samples + df_train, df_val, df_test 가 있다고 가정\n",
+        "# df_train, df_val, df_test 는 Step1 결과 split 데이터프레임\n",
+        "\n",
+        "def build_patient_sequences(df_split):\n",
+        "    \"\"\"RID별로 전체 시계열을 정렬해서 딕셔너리 형태로 반환.\"\"\"\n",
+        "    seq_dict = {}\n",
+        "    for rid, sub in df_split.groupby(\"RID\"):\n",
+        "        sub = sub.sort_values(\"Month\").reset_index(drop=True)\n",
+        "        seq_dict[rid] = sub\n",
+        "    return seq_dict\n",
+        "\n",
+        "train_seq_dict = build_patient_sequences(df_train)\n",
+        "val_seq_dict   = build_patient_sequences(df_val)\n",
+        "test_seq_dict  = build_patient_sequences(df_test)\n",
+        "\n",
+        "print(\"Train 환자 수:\", len(train_seq_dict))\n",
+        "print(\"Val 환자 수:\", len(val_seq_dict))\n",
+        "print(\"Test 환자 수:\", len(test_seq_dict))\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "TYjjlTIAe88N",
+        "outputId": "e49ef1a3-43bc-41d3-d322-791466174f48"
+      },
+      "execution_count": 26,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Train 환자 수: 1546\n",
+            "Val 환자 수: 331\n",
+            "Test 환자 수: 332\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Part 2 — anchor sample 기준으로 X 시계열 매칭\n",
+        "# Step 2에서 생성된 sample에는 RID만 있으면 됨.\n",
+        "\n",
+        "def match_anchor_to_full_sequence(samples_df, seq_dict):\n",
+        "    \"\"\"samples_df 안의 RID를 기반으로 전체 시계열을 묶어서 list 형태로 반환.\"\"\"\n",
+        "    matched_sequences = []\n",
+        "    matched_labels = []\n",
+        "\n",
+        "    for idx, row in samples_df.iterrows():\n",
+        "        rid = row[\"RID\"]\n",
+        "        if rid not in seq_dict:\n",
+        "            continue\n",
+        "\n",
+        "        full_seq = seq_dict[rid].copy()\n",
+        "        matched_sequences.append(full_seq)\n",
+        "\n",
+        "        # label dictionary\n",
+        "        labels = {\n",
+        "            \"mmse12\": row[\"MMSE_12m\"],\n",
+        "            \"adas12\": row[\"ADAS13_12m\"],\n",
+        "            \"conv12\": row[\"conv_12m\"],\n",
+        "            \"mmse_slope\": row[\"mmse_slope\"],\n",
+        "            \"adas_slope\": row[\"adas_slope\"]\n",
+        "        }\n",
+        "        matched_labels.append(labels)\n",
+        "\n",
+        "    return matched_sequences, matched_labels\n",
+        "\n",
+        "train_X_raw, train_y = match_anchor_to_full_sequence(train_samples, train_seq_dict)\n",
+        "val_X_raw,   val_y   = match_anchor_to_full_sequence(val_samples, val_seq_dict)\n",
+        "test_X_raw,  test_y  = match_anchor_to_full_sequence(test_samples, test_seq_dict)\n",
+        "\n",
+        "print(len(train_X_raw), len(val_X_raw), len(test_X_raw))\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "sMu19vJbfCAu",
+        "outputId": "48c14c41-ac09-4780-dc13-641a585040a7"
+      },
+      "execution_count": 27,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "1357 301 295\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Part 3 — missing 처리(NaN→0) + missing_mask 추가\n",
+        "\n",
+        "def add_missing_mask(seq_df):\n",
+        "    mask = seq_df.notna().astype(int)\n",
+        "    seq_filled = seq_df.fillna(0).infer_objects(copy=False)\n",
+        "    return seq_filled, mask\n",
+        "\n",
+        "def process_sequences(seq_list):\n",
+        "    seq_processed = []\n",
+        "    mask_processed = []\n",
+        "\n",
+        "    for seq in seq_list:\n",
+        "        seq_filled, mask = add_missing_mask(seq)\n",
+        "        seq_processed.append(seq_filled)\n",
+        "        mask_processed.append(mask)\n",
+        "\n",
+        "    return seq_processed, mask_processed\n",
+        "\n",
+        "train_X_proc, train_mask = process_sequences(train_X_raw)\n",
+        "val_X_proc,   val_mask   = process_sequences(val_X_raw)\n",
+        "test_X_proc,  test_mask  = process_sequences(test_X_raw)\n",
+        "\n",
+        "import pandas as pd\n",
+        "import warnings\n",
+        "\n",
+        "# pandas의 미래 버전 변경으로 인한 자동 다운캐스팅 경고를 방지\n",
+        "pd.set_option('future.no_silent_downcasting', True)  # pandas 내부 경고 억제\n",
+        "# FutureWarning(미래 버전 관련 경고)을 전역적으로 무시\n",
+        "warnings.filterwarnings(\"ignore\", category=FutureWarning)\n"
+      ],
+      "metadata": {
+        "id": "0uY1BROrfCy4"
+      },
+      "execution_count": 28,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Part 4 — Scaling (train fit → val/test transform)\n",
+        "# 모든 timestep의 전체 피처(F) 단위로 scaler 적용.\n",
+        "\n",
+        "from sklearn.preprocessing import StandardScaler\n",
+        "\n",
+        "# 스케일링 대상 컬럼 선택 (DX_bl, string 등 제외)\n",
+        "# numeric 컬럼만 자동 선택\n",
+        "feature_cols = train_X_proc[0].select_dtypes(include=[np.number]).columns.tolist()\n",
+        "\n",
+        "scaler = StandardScaler()\n",
+        "\n",
+        "# train 전체 timestep concat 후 fit\n",
+        "train_concat = pd.concat([df[feature_cols] for df in train_X_proc], axis=0)\n",
+        "scaler.fit(train_concat)\n",
+        "\n",
+        "def apply_scaler(seq_list, scaler, feature_cols):\n",
+        "    out = []\n",
+        "    for seq in seq_list:\n",
+        "        seq_scaled = seq.copy()\n",
+        "        seq_scaled[feature_cols] = scaler.transform(seq_scaled[feature_cols])\n",
+        "        out.append(seq_scaled)\n",
+        "    return out\n",
+        "\n",
+        "train_X_scaled = apply_scaler(train_X_proc, scaler, feature_cols)\n",
+        "val_X_scaled   = apply_scaler(val_X_proc, scaler, feature_cols)\n",
+        "test_X_scaled  = apply_scaler(test_X_proc, scaler, feature_cols)\n"
+      ],
+      "metadata": {
+        "id": "H77JejxrfDV6"
+      },
+      "execution_count": 29,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# ✅ Step 3 시퀀스 생성 검증 코드\n",
+        "# (어떤 RID들이 자동으로 제외됐는지 확인)\n",
+        "\n",
+        "missing_rids = []\n",
+        "empty_rids = []\n",
+        "\n",
+        "for rid, seq in zip(train_rids, train_X_scaled):\n",
+        "    # 완전히 비었거나 모든 값이 NaN\n",
+        "    if seq.empty:\n",
+        "        empty_rids.append(rid)\n",
+        "    elif seq.isna().all().all():\n",
+        "        missing_rids.append(rid)\n",
+        "\n",
+        "print(f\"빈 시퀀스 RID 개수: {len(empty_rids)}\")\n",
+        "print(f\"모두 결측인 시퀀스 RID 개수: {len(missing_rids)}\")\n",
+        "\n",
+        "# RID 목록을 직접 보고 싶다면:\n",
+        "print(\"빈 시퀀스 RID 예시:\", empty_rids[:10])\n",
+        "print(\"모두 결측 RID 예시:\", missing_rids[:10])\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "JczNomB8lzxv",
+        "outputId": "788b0fb3-7a09-4103-f959-e63e4d76cdd4"
+      },
+      "execution_count": 30,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "빈 시퀀스 RID 개수: 0\n",
+            "모두 결측인 시퀀스 RID 개수: 0\n",
+            "빈 시퀀스 RID 예시: []\n",
+            "모두 결측 RID 예시: []\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# 한 시퀀스에 다른 환자 유무 여부 검증 코드 2\n",
+        "import pandas as pd\n",
+        "\n",
+        "# 시퀀스 내 중복 RID 확인 (train 기준)\n",
+        "dup_rids = []\n",
+        "for rid, seq in zip(train_rids, train_X_scaled):\n",
+        "    if len(seq[\"RID\"].unique()) > 1:\n",
+        "        dup_rids.append(rid)\n",
+        "\n",
+        "print(f\"다른 RID가 섞인 시퀀스 개수: {len(dup_rids)}\")\n",
+        "print(\"RID 예시:\", dup_rids[:10])\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "sqpO0pyWmPGV",
+        "outputId": "46af3c35-9230-4396-8091-50e5ceade009"
+      },
+      "execution_count": 31,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "다른 RID가 섞인 시퀀스 개수: 0\n",
+            "RID 예시: []\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Part 5 — Padding + Attention Mask 생성\n",
+        "# Transformer 입력 형태: X_tensor: (T, F), attn_mask: (T)\n",
+        "\n",
+        "import torch\n",
+        "\n",
+        "def pad_sequences(X_list, mask_list):\n",
+        "    # 가장 긴 시퀀스 길이 T 찾기\n",
+        "    max_len = max(len(x) for x in X_list)\n",
+        "\n",
+        "    X_tensor_list = []\n",
+        "    mask_tensor_list = []\n",
+        "    attn_mask_list = []\n",
+        "\n",
+        "    for seq, m in zip(X_list, mask_list):\n",
+        "        T = len(seq)\n",
+        "\n",
+        "        # 🔧 숫자형으로 강제 변환 (object, 문자열 방지)\n",
+        "        seq = seq.apply(pd.to_numeric, errors='coerce').fillna(0)\n",
+        "\n",
+        "        # X\n",
+        "        x_mat = torch.tensor(seq.values, dtype=torch.float32)\n",
+        "        pad_len = max_len - T\n",
+        "        if pad_len > 0:\n",
+        "            pad = torch.zeros((pad_len, x_mat.shape[1]))\n",
+        "            x_mat = torch.cat([x_mat, pad], dim=0)\n",
+        "\n",
+        "        # missing mask\n",
+        "        m_mat = torch.tensor(m.values, dtype=torch.float32)\n",
+        "        if pad_len > 0:\n",
+        "            pad2 = torch.zeros((pad_len, m_mat.shape[1]))\n",
+        "            m_mat = torch.cat([m_mat, pad2], dim=0)\n",
+        "\n",
+        "        # attention mask (timestep 단위)\n",
+        "        attn = torch.zeros(max_len)\n",
+        "        attn[:T] = 1\n",
+        "\n",
+        "        X_tensor_list.append(x_mat)\n",
+        "        mask_tensor_list.append(m_mat)\n",
+        "        attn_mask_list.append(attn)\n",
+        "\n",
+        "    return X_tensor_list, mask_tensor_list, attn_mask_list, max_len\n",
+        "\n",
+        "train_X_tensor, train_missing_mask, train_attn, T_max = pad_sequences(train_X_scaled, train_mask)\n",
+        "val_X_tensor,   val_missing_mask,   val_attn,   _    = pad_sequences(val_X_scaled, val_mask)\n",
+        "test_X_tensor,  test_missing_mask,  test_attn,  _    = pad_sequences(test_X_scaled, test_mask)\n",
+        "\n",
+        "print(\"최대 시계열 길이:\", T_max)\n",
+        "print(\"X example shape:\", train_X_tensor[0].shape)\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "YkZ7vpeMfD4e",
+        "outputId": "6f04565b-3634-4937-ea90-bb2c267cee24"
+      },
+      "execution_count": 32,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "최대 시계열 길이: 24\n",
+            "X example shape: torch.Size([24, 17])\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Part 6 — Dataset/Dataloader 생성\n",
+        "\n",
+        "from torch.utils.data import Dataset, DataLoader\n",
+        "\n",
+        "class ADNI_TimeSeriesDataset(Dataset):\n",
+        "    def __init__(self, X, missing_mask, attn_mask, labels):\n",
+        "        self.X = X\n",
+        "        self.missing_mask = missing_mask\n",
+        "        self.attn_mask = attn_mask\n",
+        "        self.labels = labels\n",
+        "\n",
+        "    def __len__(self):\n",
+        "        return len(self.X)\n",
+        "\n",
+        "    def __getitem__(self, idx):\n",
+        "        x = self.X[idx]\n",
+        "        m = self.missing_mask[idx]\n",
+        "        attn = self.attn_mask[idx]\n",
+        "        y = self.labels[idx]\n",
+        "        return x, m, attn, y\n",
+        "\n",
+        "train_dataset = ADNI_TimeSeriesDataset(train_X_tensor, train_missing_mask, train_attn, train_y)\n",
+        "val_dataset   = ADNI_TimeSeriesDataset(val_X_tensor, val_missing_mask, val_attn, val_y)\n",
+        "test_dataset  = ADNI_TimeSeriesDataset(test_X_tensor, test_missing_mask, test_attn, test_y)\n",
+        "\n",
+        "train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)\n",
+        "val_loader   = DataLoader(val_dataset, batch_size=16, shuffle=False)\n",
+        "test_loader  = DataLoader(test_dataset, batch_size=16, shuffle=False)\n",
+        "\n",
+        "print(\"Train batches:\", len(train_loader))\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "a-BtQYWsfEYv",
+        "outputId": "178229ca-8122-458c-e672-1f9a7fa0918d"
+      },
+      "execution_count": 33,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Train batches: 85\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Step4 - baseline transformer"
+      ],
+      "metadata": {
+        "id": "05l2Y_hxuoaE"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# 라벨 중 NaN 있는 샘플 제거\n",
+        "\n",
+        "def filter_nan_labels(X, mask, attn, y):\n",
+        "    good_idx = []\n",
+        "    for i, t in enumerate(y):\n",
+        "        if (t[\"mmse12\"] is None or np.isnan(t[\"mmse12\"])): continue\n",
+        "        if (t[\"adas12\"] is None or np.isnan(t[\"adas12\"])): continue\n",
+        "        if (t[\"conv12\"] is None or np.isnan(t[\"conv12\"])): continue\n",
+        "        if (t[\"mmse_slope\"] is None or np.isnan(t[\"mmse_slope\"])): continue\n",
+        "        if (t[\"adas_slope\"] is None or np.isnan(t[\"adas_slope\"])): continue\n",
+        "        good_idx.append(i)\n",
+        "\n",
+        "    X = [X[i] for i in good_idx]\n",
+        "    mask = [mask[i] for i in good_idx]\n",
+        "    attn = [attn[i] for i in good_idx]\n",
+        "    y = [y[i] for i in good_idx]\n",
+        "    print(\"Filtered:\", len(good_idx))\n",
+        "    return X, mask, attn, y\n",
+        "\n",
+        "train_X_tensor, train_missing_mask, train_attn, train_y = \\\n",
+        "    filter_nan_labels(train_X_tensor, train_missing_mask, train_attn, train_y)\n",
+        "\n",
+        "val_X_tensor, val_missing_mask, val_attn, val_y = \\\n",
+        "    filter_nan_labels(val_X_tensor, val_missing_mask, val_attn, val_y)\n",
+        "\n",
+        "test_X_tensor, test_missing_mask, test_attn, test_y = \\\n",
+        "    filter_nan_labels(test_X_tensor, test_missing_mask, test_attn, test_y)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "VRt2gYywwgTW",
+        "outputId": "6c47bcaf-cd6d-483f-8bda-0d0eae3bb2e8"
+      },
+      "execution_count": 34,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Filtered: 1158\n",
+            "Filtered: 261\n",
+            "Filtered: 253\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import torch\n",
+        "import torch.nn as nn\n",
+        "import torch.nn.functional as F\n",
+        "from torch.utils.data import Dataset, DataLoader\n",
+        "from sklearn.metrics import mean_absolute_error, roc_auc_score\n",
+        "import math\n",
+        "\n",
+        "device = torch.device(\"cuda\" if torch.cuda.is_available() else \"cpu\")\n",
+        "print(\"Using device:\", device)\n",
+        "\n",
+        "# ======================================================\n",
+        "# 1. Dataset (혹시 기존 정의가 있다면 동일하게 써도 됨)\n",
+        "# ======================================================\n",
+        "\n",
+        "class ADNI_TimeSeriesDataset(Dataset):\n",
+        "    def __init__(self, X, missing_mask, attn_mask, labels):\n",
+        "        self.X = X\n",
+        "        self.missing_mask = missing_mask\n",
+        "        self.attn_mask = attn_mask\n",
+        "        self.labels = labels\n",
+        "\n",
+        "    def __len__(self):\n",
+        "        return len(self.X)\n",
+        "\n",
+        "    def __getitem__(self, idx):\n",
+        "        x = self.X[idx]              # (T, F)\n",
+        "        m = self.missing_mask[idx]   # (T, F)\n",
+        "        attn = self.attn_mask[idx]   # (T,)\n",
+        "        y = self.labels[idx]         # dict\n",
+        "        return x, m, attn, y\n",
+        "\n",
+        "# NaN 필터링까지 끝난 뒤에 Dataset / DataLoader 재생성\n",
+        "train_dataset = ADNI_TimeSeriesDataset(train_X_tensor, train_missing_mask, train_attn, train_y)\n",
+        "val_dataset   = ADNI_TimeSeriesDataset(val_X_tensor, val_missing_mask, val_attn, val_y)\n",
+        "test_dataset  = ADNI_TimeSeriesDataset(test_X_tensor, test_missing_mask, test_attn, test_y)\n",
+        "\n",
+        "train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)\n",
+        "val_loader   = DataLoader(val_dataset, batch_size=16, shuffle=False)\n",
+        "test_loader  = DataLoader(test_dataset, batch_size=16, shuffle=False)\n",
+        "\n",
+        "print(\"Train batches:\", len(train_loader))\n",
+        "\n",
+        "# ======================================================\n",
+        "# 2. Positional Encoding (Sinusoidal, ONNX 친화적)\n",
+        "# ======================================================\n",
+        "\n",
+        "class PositionalEncoding(nn.Module):\n",
+        "    def __init__(self, d_model, max_len=500):\n",
+        "        super().__init__()\n",
+        "        pe = torch.zeros(max_len, d_model)  # (T, d_model)\n",
+        "        position = torch.arange(0, max_len, dtype=torch.float32).unsqueeze(1)\n",
+        "        div_term = torch.exp(torch.arange(0, d_model, 2).float()\n",
+        "                             * (-math.log(10000.0) / d_model))\n",
+        "        pe[:, 0::2] = torch.sin(position * div_term)\n",
+        "        pe[:, 1::2] = torch.cos(position * div_term)\n",
+        "        pe = pe.unsqueeze(0)  # (1, T, d_model)\n",
+        "        self.register_buffer('pe', pe)\n",
+        "\n",
+        "    def forward(self, x):\n",
+        "        # x: (B, T, d_model)\n",
+        "        T = x.size(1)\n",
+        "        return x + self.pe[:, :T, :]\n",
+        "\n",
+        "# ======================================================\n",
+        "# 3. 안정화 버전 Baseline Transformer\n",
+        "# ======================================================\n",
+        "\n",
+        "class BaselineTransformer(nn.Module):\n",
+        "    def __init__(self,\n",
+        "                 input_dim,          # 원본 feature dim (예: 115)\n",
+        "                 d_model=64,         # 더 작게\n",
+        "                 nhead=4,\n",
+        "                 num_layers=1,       # 레이어 1개로 시작\n",
+        "                 dim_feedforward=128,\n",
+        "                 dropout=0.1):\n",
+        "        super().__init__()\n",
+        "\n",
+        "        # missing_mask를 concat 할거라서 input_dim * 2\n",
+        "        self.concat_missing = True\n",
+        "        concat_dim = input_dim * 2 if self.concat_missing else input_dim\n",
+        "\n",
+        "        self.input_proj = nn.Linear(concat_dim, d_model)\n",
+        "        self.pos_encoder = PositionalEncoding(d_model=d_model, max_len=500)\n",
+        "\n",
+        "        encoder_layer = nn.TransformerEncoderLayer(\n",
+        "            d_model=d_model,\n",
+        "            nhead=nhead,\n",
+        "            dim_feedforward=dim_feedforward,\n",
+        "            dropout=dropout,\n",
+        "            batch_first=True,   # (B, T, C) 형식 사용\n",
+        "            norm_first=True\n",
+        "        )\n",
+        "        self.transformer = nn.TransformerEncoder(\n",
+        "            encoder_layer,\n",
+        "            num_layers=num_layers\n",
+        "        )\n",
+        "\n",
+        "        self.layer_norm = nn.LayerNorm(d_model)\n",
+        "        self.dropout = nn.Dropout(dropout)\n",
+        "\n",
+        "        # 멀티태스크 헤드\n",
+        "        self.mmse_head       = nn.Linear(d_model, 1)\n",
+        "        self.adas_head       = nn.Linear(d_model, 1)\n",
+        "        self.conv_head       = nn.Linear(d_model, 1)  # logit\n",
+        "        self.mmse_slope_head = nn.Linear(d_model, 1)\n",
+        "        self.adas_slope_head = nn.Linear(d_model, 1)\n",
+        "\n",
+        "        self._init_weights()\n",
+        "\n",
+        "    def _init_weights(self):\n",
+        "        # 안정적인 초기화\n",
+        "        for m in self.modules():\n",
+        "            if isinstance(m, nn.Linear):\n",
+        "                nn.init.xavier_uniform_(m.weight)\n",
+        "                if m.bias is not None:\n",
+        "                    nn.init.zeros_(m.bias)\n",
+        "\n",
+        "    def forward(self, x, missing_mask, attn_mask):\n",
+        "        \"\"\"\n",
+        "        x:            (B, T, F)\n",
+        "        missing_mask: (B, T, F)  - 1=값 있음, 0=결측\n",
+        "        attn_mask:    (B, T)     - 1=실데이터, 0=패딩\n",
+        "        \"\"\"\n",
+        "        B, T, F_dim = x.shape\n",
+        "\n",
+        "        if self.concat_missing:\n",
+        "            inp = torch.cat([x, missing_mask.float()], dim=-1)  # (B, T, 2F)\n",
+        "        else:\n",
+        "            inp = x\n",
+        "\n",
+        "        h = self.input_proj(inp)          # (B, T, d_model)\n",
+        "        h = self.pos_encoder(h)           # positional encoding\n",
+        "        h = self.layer_norm(h)\n",
+        "        h = self.dropout(h)\n",
+        "\n",
+        "        # key_padding_mask: True = 무시할 위치\n",
+        "        key_padding_mask = (attn_mask == 0)  # (B, T) bool\n",
+        "\n",
+        "        h = self.transformer(h, src_key_padding_mask=key_padding_mask)  # (B, T, d_model)\n",
+        "\n",
+        "        # Masked mean pooling\n",
+        "        valid_mask = attn_mask.unsqueeze(-1).float()  # (B, T, 1)\n",
+        "        h_sum = (h * valid_mask).sum(dim=1)           # (B, d_model)\n",
+        "        lengths = valid_mask.sum(dim=1).clamp(min=1)  # (B, 1)\n",
+        "        h_pooled = h_sum / lengths                    # (B, d_model)\n",
+        "\n",
+        "        h_pooled = self.dropout(h_pooled)\n",
+        "\n",
+        "        mmse_pred       = self.mmse_head(h_pooled)\n",
+        "        adas_pred       = self.adas_head(h_pooled)\n",
+        "        conv_logit      = self.conv_head(h_pooled)\n",
+        "        mmse_slope_pred = self.mmse_slope_head(h_pooled)\n",
+        "        adas_slope_pred = self.adas_slope_head(h_pooled)\n",
+        "\n",
+        "        return {\n",
+        "            \"mmse12\": mmse_pred,           # (B, 1)\n",
+        "            \"adas12\": adas_pred,           # (B, 1)\n",
+        "            \"conv12_logit\": conv_logit,    # (B, 1)\n",
+        "            \"mmse_slope\": mmse_slope_pred, # (B, 1)\n",
+        "            \"adas_slope\": adas_slope_pred  # (B, 1)\n",
+        "        }\n",
+        "\n",
+        "# ======================================================\n",
+        "# 4. Loss & target 준비 함수\n",
+        "# ======================================================\n",
+        "\n",
+        "mse_loss = nn.MSELoss()\n",
+        "bce_loss = nn.BCEWithLogitsLoss()\n",
+        "\n",
+        "def prepare_targets(y_batch, device):\n",
+        "    # DataLoader 기본 collate는 dict of tensors 로 만들어줌\n",
+        "    if isinstance(y_batch, dict):\n",
+        "        mmse12 = y_batch[\"mmse12\"].float().to(device)\n",
+        "        adas12 = y_batch[\"adas12\"].float().to(device)\n",
+        "        conv12 = y_batch[\"conv12\"].float().to(device)\n",
+        "        mmse_s = y_batch[\"mmse_slope\"].float().to(device)\n",
+        "        adas_s = y_batch[\"adas_slope\"].float().to(device)\n",
+        "    else:\n",
+        "        # list of dict 인 경우 대비\n",
+        "        mmse12 = torch.tensor([y[\"mmse12\"] for y in y_batch], dtype=torch.float32, device=device)\n",
+        "        adas12 = torch.tensor([y[\"adas12\"] for y in y_batch], dtype=torch.float32, device=device)\n",
+        "        conv12 = torch.tensor([y[\"conv12\"] for y in y_batch], dtype=torch.float32, device=device)\n",
+        "        mmse_s = torch.tensor([y[\"mmse_slope\"] for y in y_batch], dtype=torch.float32, device=device)\n",
+        "        adas_s = torch.tensor([y[\"adas_slope\"] for y in y_batch], dtype=torch.float32, device=device)\n",
+        "\n",
+        "    return {\n",
+        "        \"mmse12\": mmse12,\n",
+        "        \"adas12\": adas12,\n",
+        "        \"conv12\": conv12,\n",
+        "        \"mmse_slope\": mmse_s,\n",
+        "        \"adas_slope\": adas_s\n",
+        "    }\n",
+        "\n",
+        "def compute_loss(outputs, targets, loss_weights=None):\n",
+        "    if loss_weights is None:\n",
+        "        loss_weights = {\n",
+        "            \"mmse12\": 1.0,\n",
+        "            \"adas12\": 1.0,\n",
+        "            \"conv12\": 1.0,\n",
+        "            \"mmse_slope\": 0.5,\n",
+        "            \"adas_slope\": 0.5\n",
+        "        }\n",
+        "\n",
+        "    mmse12_pred = outputs[\"mmse12\"].squeeze(-1)\n",
+        "    adas12_pred = outputs[\"adas12\"].squeeze(-1)\n",
+        "    conv_logit  = outputs[\"conv12_logit\"].squeeze(-1)\n",
+        "    mmse_s_pred = outputs[\"mmse_slope\"].squeeze(-1)\n",
+        "    adas_s_pred = outputs[\"adas_slope\"].squeeze(-1)\n",
+        "\n",
+        "    mmse12_true = targets[\"mmse12\"]\n",
+        "    adas12_true = targets[\"adas12\"]\n",
+        "    conv12_true = targets[\"conv12\"]\n",
+        "    mmse_s_true = targets[\"mmse_slope\"]\n",
+        "    adas_s_true = targets[\"adas_slope\"]\n",
+        "\n",
+        "    l_mmse12 = mse_loss(mmse12_pred, mmse12_true)\n",
+        "    l_adas12 = mse_loss(adas12_pred, adas12_true)\n",
+        "    l_conv   = bce_loss(conv_logit, conv12_true)\n",
+        "    l_mmse_s = mse_loss(mmse_s_pred, mmse_s_true)\n",
+        "    l_adas_s = mse_loss(adas_s_pred, adas_s_true)\n",
+        "\n",
+        "    total = (\n",
+        "        loss_weights[\"mmse12\"] * l_mmse12 +\n",
+        "        loss_weights[\"adas12\"] * l_adas12 +\n",
+        "        loss_weights[\"conv12\"] * l_conv +\n",
+        "        loss_weights[\"mmse_slope\"] * l_mmse_s +\n",
+        "        loss_weights[\"adas_slope\"] * l_adas_s\n",
+        "    )\n",
+        "\n",
+        "    loss_dict = {\n",
+        "        \"total\": total.item(),\n",
+        "        \"mmse12\": l_mmse12.item(),\n",
+        "        \"adas12\": l_adas12.item(),\n",
+        "        \"conv12\": l_conv.item(),\n",
+        "        \"mmse_slope\": l_mmse_s.item(),\n",
+        "        \"adas_slope\": l_adas_s.item()\n",
+        "    }\n",
+        "    return total, loss_dict\n",
+        "\n",
+        "# ======================================================\n",
+        "# 5. Train / Evaluate 루프 (gradient clipping 포함)\n",
+        "# ======================================================\n",
+        "\n",
+        "def train_one_epoch(model, dataloader, optimizer, loss_weights=None, max_grad_norm=1.0):\n",
+        "    model.train()\n",
+        "    running_loss = 0.0\n",
+        "\n",
+        "    for batch in dataloader:\n",
+        "        x, missing_mask, attn_mask, y_batch = batch\n",
+        "        x = x.to(device)\n",
+        "        missing_mask = missing_mask.to(device)\n",
+        "        attn_mask = attn_mask.to(device)\n",
+        "        targets = prepare_targets(y_batch, device)\n",
+        "\n",
+        "        optimizer.zero_grad()\n",
+        "        outputs = model(x, missing_mask, attn_mask)\n",
+        "        loss, _ = compute_loss(outputs, targets, loss_weights)\n",
+        "\n",
+        "        # NaN 방지: loss가 NaN이면 그 배치는 스킵\n",
+        "        if torch.isnan(loss):\n",
+        "            print(\"⚠️ NaN loss detected, skipping this batch\")\n",
+        "            continue\n",
+        "\n",
+        "        loss.backward()\n",
+        "        # gradient clipping\n",
+        "        nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)\n",
+        "        optimizer.step()\n",
+        "\n",
+        "        running_loss += loss.item()\n",
+        "\n",
+        "    avg_loss = running_loss / max(len(dataloader), 1)\n",
+        "    return avg_loss\n",
+        "\n",
+        "def evaluate(model, dataloader):\n",
+        "    model.eval()\n",
+        "    running_loss = 0.0\n",
+        "\n",
+        "    all_mmse_true, all_mmse_pred = [], []\n",
+        "    all_adas_true, all_adas_pred = [], []\n",
+        "    all_conv_true, all_conv_prob = [], []\n",
+        "\n",
+        "    with torch.no_grad():\n",
+        "        for batch in dataloader:\n",
+        "            x, missing_mask, attn_mask, y_batch = batch\n",
+        "            x = x.to(device)\n",
+        "            missing_mask = missing_mask.to(device)\n",
+        "            attn_mask = attn_mask.to(device)\n",
+        "            targets = prepare_targets(y_batch, device)\n",
+        "\n",
+        "            outputs = model(x, missing_mask, attn_mask)\n",
+        "            loss, _ = compute_loss(outputs, targets)\n",
+        "            if torch.isnan(loss):\n",
+        "                continue\n",
+        "\n",
+        "            running_loss += loss.item()\n",
+        "\n",
+        "            mmse_pred = outputs[\"mmse12\"].squeeze(-1).cpu().numpy()\n",
+        "            adas_pred = outputs[\"adas12\"].squeeze(-1).cpu().numpy()\n",
+        "            mmse_true = targets[\"mmse12\"].cpu().numpy()\n",
+        "            adas_true = targets[\"adas12\"].cpu().numpy()\n",
+        "\n",
+        "            all_mmse_true.extend(mmse_true.tolist())\n",
+        "            all_mmse_pred.extend(mmse_pred.tolist())\n",
+        "            all_adas_true.extend(adas_true.tolist())\n",
+        "            all_adas_pred.extend(adas_pred.tolist())\n",
+        "\n",
+        "            conv_logit = outputs[\"conv12_logit\"].squeeze(-1)\n",
+        "            conv_prob = torch.sigmoid(conv_logit).cpu().numpy()\n",
+        "            conv_true = targets[\"conv12\"].cpu().numpy()\n",
+        "\n",
+        "            all_conv_true.extend(conv_true.tolist())\n",
+        "            all_conv_prob.extend(conv_prob.tolist())\n",
+        "\n",
+        "    avg_loss = running_loss / max(len(dataloader), 1)\n",
+        "\n",
+        "    # MAE (데이터가 있으면만 계산)\n",
+        "    if len(all_mmse_true) > 0:\n",
+        "        mmse_mae = mean_absolute_error(all_mmse_true, all_mmse_pred)\n",
+        "        adas_mae = mean_absolute_error(all_adas_true, all_adas_pred)\n",
+        "    else:\n",
+        "        mmse_mae, adas_mae = None, None\n",
+        "\n",
+        "    # AUC\n",
+        "    auc = None\n",
+        "    try:\n",
+        "        if len(set(all_conv_true)) > 1:\n",
+        "            auc = roc_auc_score(all_conv_true, all_conv_prob)\n",
+        "    except Exception:\n",
+        "        auc = None\n",
+        "\n",
+        "    metrics = {\n",
+        "        \"loss\": avg_loss,\n",
+        "        \"mmse_mae\": mmse_mae,\n",
+        "        \"adas_mae\": adas_mae,\n",
+        "        \"conv_auc\": auc\n",
+        "    }\n",
+        "    return metrics\n",
+        "\n",
+        "# ======================================================\n",
+        "# 6. 학습 실행\n",
+        "# ======================================================\n",
+        "\n",
+        "input_dim = train_X_tensor[0].shape[-1]\n",
+        "\n",
+        "model = BaselineTransformer(\n",
+        "    input_dim=input_dim,\n",
+        "    d_model=128,\n",
+        "    nhead=4,\n",
+        "    num_layers=2,\n",
+        "    dim_feedforward=256,\n",
+        "    dropout=0.1\n",
+        ").to(device)\n",
+        "\n",
+        "optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)\n",
+        "\n",
+        "num_epochs = 40 # epoch 조정\n",
+        "best_val_loss = float(\"inf\")\n",
+        "best_model_path = \"/content/last_transformer_stable_best.pt\"\n",
+        "\n",
+        "for epoch in range(1, num_epochs + 1):\n",
+        "    train_loss = train_one_epoch(model, train_loader, optimizer)\n",
+        "    val_metrics = evaluate(model, val_loader)\n",
+        "\n",
+        "    mmse_mae_str = f\"{val_metrics['mmse_mae']:.3f}\" if val_metrics[\"mmse_mae\"] is not None else \"N/A\"\n",
+        "    adas_mae_str = f\"{val_metrics['adas_mae']:.3f}\" if val_metrics[\"adas_mae\"] is not None else \"N/A\"\n",
+        "    auc_str      = f\"{val_metrics['conv_auc']:.3f}\" if val_metrics[\"conv_auc\"] is not None else \"N/A\"\n",
+        "\n",
+        "    print(f\"[Epoch {epoch:02d}] \"\n",
+        "          f\"Train Loss: {train_loss:.4f} | \"\n",
+        "          f\"Val Loss: {val_metrics['loss']:.4f} | \"\n",
+        "          f\"Val MMSE MAE: {mmse_mae_str} | \"\n",
+        "          f\"Val ADAS MAE: {adas_mae_str} | \"\n",
+        "          f\"Val AUC: {auc_str}\")\n",
+        "\n",
+        "    if val_metrics[\"loss\"] < best_val_loss:\n",
+        "        best_val_loss = val_metrics[\"loss\"]\n",
+        "        torch.save(model.state_dict(), best_model_path)\n",
+        "        print(f\"  👉 Best model updated! (saved to {best_model_path})\")\n",
+        "\n",
+        "print(\"Training finished. Best val loss:\", best_val_loss)\n",
+        "\n",
+        "# 최종 best 모델 로드해서 test 평가\n",
+        "best_model = BaselineTransformer(\n",
+        "    input_dim=input_dim,\n",
+        "    d_model=128,\n",
+        "    nhead=4,\n",
+        "    num_layers=2,\n",
+        "    dim_feedforward=256,\n",
+        "    dropout=0.1\n",
+        ").to(device)\n",
+        "best_model.load_state_dict(torch.load(best_model_path, map_location=device))\n",
+        "\n",
+        "test_metrics = evaluate(best_model, test_loader)\n",
+        "print(\"\\n[Test] Loss: {:.4f} | MMSE MAE: {} | ADAS MAE: {} | AUC: {}\".format(\n",
+        "    test_metrics[\"loss\"],\n",
+        "    test_metrics[\"mmse_mae\"] if test_metrics[\"mmse_mae\"] is not None else \"N/A\",\n",
+        "    test_metrics[\"adas_mae\"] if test_metrics[\"adas_mae\"] is not None else \"N/A\",\n",
+        "    test_metrics[\"conv_auc\"] if test_metrics[\"conv_auc\"] is not None else \"N/A\"\n",
+        "))\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "jA9FEUc21RCS",
+        "outputId": "1c802749-8b8e-4ffb-d5c8-5b6fb4737897"
+      },
+      "execution_count": 64,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Using device: cuda\n",
+            "Train batches: 73\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/transformer.py:392: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True\n",
+            "  warnings.warn(\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "[Epoch 01] Train Loss: 281.8432 | Val Loss: 33.7535 | Val MMSE MAE: 2.126 | Val ADAS MAE: 3.930 | Val AUC: 0.699\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 02] Train Loss: 39.7069 | Val Loss: 30.1301 | Val MMSE MAE: 2.098 | Val ADAS MAE: 3.774 | Val AUC: 0.718\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 03] Train Loss: 33.9920 | Val Loss: 27.9638 | Val MMSE MAE: 1.552 | Val ADAS MAE: 3.732 | Val AUC: 0.742\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 04] Train Loss: 30.3640 | Val Loss: 24.6431 | Val MMSE MAE: 2.203 | Val ADAS MAE: 3.156 | Val AUC: 0.759\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 05] Train Loss: 29.4576 | Val Loss: 19.4356 | Val MMSE MAE: 1.587 | Val ADAS MAE: 2.907 | Val AUC: 0.773\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 06] Train Loss: 27.2084 | Val Loss: 22.0512 | Val MMSE MAE: 1.825 | Val ADAS MAE: 3.041 | Val AUC: 0.783\n",
+            "[Epoch 07] Train Loss: 25.6297 | Val Loss: 18.2754 | Val MMSE MAE: 1.628 | Val ADAS MAE: 2.873 | Val AUC: 0.789\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 08] Train Loss: 23.0649 | Val Loss: 16.4019 | Val MMSE MAE: 1.453 | Val ADAS MAE: 2.682 | Val AUC: 0.795\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 09] Train Loss: 22.3425 | Val Loss: 17.8573 | Val MMSE MAE: 1.545 | Val ADAS MAE: 2.672 | Val AUC: 0.803\n",
+            "[Epoch 10] Train Loss: 20.8908 | Val Loss: 14.3188 | Val MMSE MAE: 1.325 | Val ADAS MAE: 2.373 | Val AUC: 0.811\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 11] Train Loss: 19.3839 | Val Loss: 15.2737 | Val MMSE MAE: 1.406 | Val ADAS MAE: 2.493 | Val AUC: 0.815\n",
+            "[Epoch 12] Train Loss: 19.1719 | Val Loss: 14.8595 | Val MMSE MAE: 1.402 | Val ADAS MAE: 2.348 | Val AUC: 0.826\n",
+            "[Epoch 13] Train Loss: 17.5598 | Val Loss: 14.6389 | Val MMSE MAE: 1.673 | Val ADAS MAE: 2.325 | Val AUC: 0.834\n",
+            "[Epoch 14] Train Loss: 17.2859 | Val Loss: 9.9364 | Val MMSE MAE: 1.303 | Val ADAS MAE: 1.743 | Val AUC: 0.841\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 15] Train Loss: 16.2601 | Val Loss: 11.2395 | Val MMSE MAE: 1.541 | Val ADAS MAE: 1.840 | Val AUC: 0.845\n",
+            "[Epoch 16] Train Loss: 15.2406 | Val Loss: 10.1613 | Val MMSE MAE: 1.571 | Val ADAS MAE: 1.574 | Val AUC: 0.845\n",
+            "[Epoch 17] Train Loss: 15.2739 | Val Loss: 10.3395 | Val MMSE MAE: 1.722 | Val ADAS MAE: 1.517 | Val AUC: 0.854\n",
+            "[Epoch 18] Train Loss: 15.0983 | Val Loss: 11.6020 | Val MMSE MAE: 2.014 | Val ADAS MAE: 1.485 | Val AUC: 0.854\n",
+            "[Epoch 19] Train Loss: 14.0153 | Val Loss: 8.4635 | Val MMSE MAE: 1.309 | Val ADAS MAE: 1.385 | Val AUC: 0.859\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 20] Train Loss: 12.7609 | Val Loss: 7.9151 | Val MMSE MAE: 1.309 | Val ADAS MAE: 1.445 | Val AUC: 0.863\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 21] Train Loss: 13.2828 | Val Loss: 8.4215 | Val MMSE MAE: 1.349 | Val ADAS MAE: 1.499 | Val AUC: 0.864\n",
+            "[Epoch 22] Train Loss: 12.4739 | Val Loss: 7.5970 | Val MMSE MAE: 1.283 | Val ADAS MAE: 1.297 | Val AUC: 0.868\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 23] Train Loss: 11.3771 | Val Loss: 7.8561 | Val MMSE MAE: 1.232 | Val ADAS MAE: 1.489 | Val AUC: 0.867\n",
+            "[Epoch 24] Train Loss: 12.5849 | Val Loss: 6.9199 | Val MMSE MAE: 1.205 | Val ADAS MAE: 1.167 | Val AUC: 0.870\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 25] Train Loss: 12.6110 | Val Loss: 6.9565 | Val MMSE MAE: 1.242 | Val ADAS MAE: 1.218 | Val AUC: 0.871\n",
+            "[Epoch 26] Train Loss: 11.6629 | Val Loss: 7.2363 | Val MMSE MAE: 1.186 | Val ADAS MAE: 1.349 | Val AUC: 0.872\n",
+            "[Epoch 27] Train Loss: 11.0588 | Val Loss: 6.1858 | Val MMSE MAE: 1.210 | Val ADAS MAE: 1.049 | Val AUC: 0.878\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 28] Train Loss: 11.4049 | Val Loss: 6.6207 | Val MMSE MAE: 1.270 | Val ADAS MAE: 1.121 | Val AUC: 0.877\n",
+            "[Epoch 29] Train Loss: 10.8764 | Val Loss: 6.6884 | Val MMSE MAE: 1.162 | Val ADAS MAE: 1.199 | Val AUC: 0.882\n",
+            "[Epoch 30] Train Loss: 11.1745 | Val Loss: 5.4967 | Val MMSE MAE: 1.154 | Val ADAS MAE: 1.081 | Val AUC: 0.882\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 31] Train Loss: 9.9809 | Val Loss: 5.5914 | Val MMSE MAE: 1.092 | Val ADAS MAE: 1.096 | Val AUC: 0.885\n",
+            "[Epoch 32] Train Loss: 10.6106 | Val Loss: 5.3126 | Val MMSE MAE: 1.177 | Val ADAS MAE: 0.929 | Val AUC: 0.884\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 33] Train Loss: 9.9633 | Val Loss: 5.2123 | Val MMSE MAE: 1.097 | Val ADAS MAE: 0.998 | Val AUC: 0.884\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 34] Train Loss: 10.0797 | Val Loss: 4.6217 | Val MMSE MAE: 1.038 | Val ADAS MAE: 0.901 | Val AUC: 0.886\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "[Epoch 35] Train Loss: 9.8348 | Val Loss: 7.0262 | Val MMSE MAE: 1.158 | Val ADAS MAE: 1.621 | Val AUC: 0.891\n",
+            "[Epoch 36] Train Loss: 10.5247 | Val Loss: 4.6845 | Val MMSE MAE: 0.962 | Val ADAS MAE: 1.164 | Val AUC: 0.894\n",
+            "[Epoch 37] Train Loss: 9.8814 | Val Loss: 4.7393 | Val MMSE MAE: 1.020 | Val ADAS MAE: 1.031 | Val AUC: 0.893\n",
+            "[Epoch 38] Train Loss: 9.4887 | Val Loss: 5.3414 | Val MMSE MAE: 1.030 | Val ADAS MAE: 1.233 | Val AUC: 0.894\n",
+            "[Epoch 39] Train Loss: 9.2441 | Val Loss: 4.8109 | Val MMSE MAE: 0.950 | Val ADAS MAE: 1.201 | Val AUC: 0.897\n",
+            "[Epoch 40] Train Loss: 8.7067 | Val Loss: 4.1161 | Val MMSE MAE: 0.979 | Val ADAS MAE: 0.976 | Val AUC: 0.902\n",
+            "  👉 Best model updated! (saved to /content/last_transformer_stable_best.pt)\n",
+            "Training finished. Best val loss: 4.116083769237294\n",
+            "\n",
+            "[Test] Loss: 3.4958 | MMSE MAE: 0.9256863839070316 | ADAS MAE: 0.8947609706594067 | AUC: 0.938380858734841\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/transformer.py:392: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True\n",
+            "  warnings.warn(\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# batch 하나 뽑아서 모델로 inference"
+      ],
+      "metadata": {
+        "id": "TtSu1X23uMjO"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "print(\"input_dim =\", input_dim)\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "fJH-Xbrj4hbe",
+        "outputId": "b1750585-14e5-4a02-9ba1-3c15e4f1929e"
+      },
+      "execution_count": 65,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "input_dim = 17\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "print(test_X_tensor[0].shape)\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "XRWR3o8j49WE",
+        "outputId": "e5b7969b-ba74-42b8-e81b-4b1c8fc96e00"
+      },
+      "execution_count": 66,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "torch.Size([24, 17])\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# 모델 로드\n",
+        "best_model = BaselineTransformer(\n",
+        "    input_dim=input_dim,\n",
+        "    d_model=128,\n",
+        "    nhead=4,\n",
+        "    num_layers=2,\n",
+        "    dim_feedforward=256,\n",
+        "    dropout=0.1\n",
+        ").to(device)\n",
+        "\n",
+        "best_model.load_state_dict(torch.load(\"/content/last_transformer_stable_best.pt\", map_location=device))\n",
+        "best_model.eval()\n",
+        "\n",
+        "print(\"Best model loaded!\")\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "rrTo63435has",
+        "outputId": "1416f8a4-d774-4723-a8c5-ff3011ff1d0a"
+      },
+      "execution_count": 67,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Best model loaded!\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/transformer.py:392: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True\n",
+            "  warnings.warn(\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# 테스트 세트에서 첫 번째 환자 시퀀스 꺼내기\n",
+        "x, m, attn, y_true = test_dataset[0]\n",
+        "\n",
+        "# 배치 차원 추가\n",
+        "x = x.unsqueeze(0).to(device)          # (1, T, F)\n",
+        "m = m.unsqueeze(0).to(device)          # (1, T, F)\n",
+        "attn = attn.unsqueeze(0).to(device)    # (1, T)\n"
+      ],
+      "metadata": {
+        "id": "ox_F_Tym5jPt"
+      },
+      "execution_count": 68,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "with torch.no_grad():\n",
+        "    outputs = best_model(x, m, attn)\n",
+        "\n",
+        "mmse_pred  = outputs[\"mmse12\"].item()\n",
+        "adas_pred  = outputs[\"adas12\"].item()\n",
+        "conv_prob  = torch.sigmoid(outputs[\"conv12_logit\"]).item()\n",
+        "mmse_slope = outputs[\"mmse_slope\"].item()\n",
+        "adas_slope = outputs[\"adas_slope\"].item()\n"
+      ],
+      "metadata": {
+        "id": "3TQw3jkz5kxi"
+      },
+      "execution_count": 70,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "print(\"===== 단일 환자 예측 결과 =====\")\n",
+        "print(f\"MMSE 12m 예측값      : {mmse_pred:.4f}\")\n",
+        "print(f\"ADAS13 12m 예측값    : {adas_pred:.4f}\")\n",
+        "print(f\"전환 확률(conv)       : {conv_prob:.4f}\")\n",
+        "print(f\"MMSE 변화 속도        : {mmse_slope:.4f}\")\n",
+        "print(f\"ADAS 변화 속도        : {adas_slope:.4f}\")\n",
+        "\n",
+        "print(\"\\n===== 실제 정답 =====\")\n",
+        "print(y_true)\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "k5uEWk4Z5mRW",
+        "outputId": "3e62f56b-d466-4940-de4a-8efc3fb732ca"
+      },
+      "execution_count": 71,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "===== 단일 환자 예측 결과 =====\n",
+            "MMSE 12m 예측값      : 27.3638\n",
+            "ADAS13 12m 예측값    : 11.7681\n",
+            "전환 확률(conv)       : 0.0019\n",
+            "MMSE 변화 속도        : 0.2684\n",
+            "ADAS 변화 속도        : -0.2425\n",
+            "\n",
+            "===== 실제 정답 =====\n",
+            "{'mmse12': np.float64(29.0), 'adas12': np.float64(12.0), 'conv12': np.float64(0.0), 'mmse_slope': np.float64(0.3333333333333333), 'adas_slope': np.float64(-0.3608333333333332)}\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# ONNX 추출"
+      ],
+      "metadata": {
+        "id": "CjvltJYBXTIS"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "#!pip install onnx onnxruntime onnxscript --upgrade\n",
+        "#!pip install onnxscript\n",
+        "\n"
+      ],
+      "metadata": {
+        "collapsed": true,
+        "id": "z2djk0oqZUNk"
+      },
+      "execution_count": 60,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# 모델 로드 (이미 학습한 코드에서 input_dim=20으로 계산됨)\n",
+        "best_model = BaselineTransformer(\n",
+        "    input_dim=input_dim,   # = 20\n",
+        "    d_model=128,\n",
+        "    nhead=4,\n",
+        "    num_layers=2,\n",
+        "    dim_feedforward=256,\n",
+        "    dropout=0.1\n",
+        ").to(device)\n",
+        "\n",
+        "best_model.load_state_dict(torch.load(\"/content/last_transformer_stable_best.pt\", map_location=device))\n",
+        "best_model.eval()\n",
+        "\n",
+        "print(\"Best model loaded and ready for ONNX export.\")\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "Qnjt7QSmXV8c",
+        "outputId": "c41eabbb-9717-4a89-b62d-142eb85767a6"
+      },
+      "execution_count": 72,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Best model loaded and ready for ONNX export.\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "T = 24  # 혹은 test_loader에서 실제 길이로 가져와도 됨\n",
+        "\n",
+        "dummy_x = torch.randn(1, T, input_dim).to(device)\n",
+        "dummy_m = torch.ones(1, T, input_dim).to(device)   # missing mask = 항상 1로\n",
+        "dummy_attn = torch.ones(1, T).to(device)           # 모든 timestep을 valid로\n"
+      ],
+      "metadata": {
+        "id": "av_i-MMbXmcE"
+      },
+      "execution_count": 73,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "onnx_path = \"/content/transformer_stable_best.onnx\"\n",
+        "\n",
+        "torch.onnx.export(\n",
+        "    best_model,\n",
+        "    (dummy_x, dummy_m, dummy_attn),     # 모델 입력 튜플\n",
+        "    onnx_path,                          # 저장 경로\n",
+        "    export_params=True,                 # 가중치 포함 저장\n",
+        "    opset_version=14,\n",
+        "    input_names=[\"x\", \"missing_mask\", \"attn_mask\"],\n",
+        "    output_names=[\"mmse12\", \"adas12\", \"conv12_logit\", \"mmse_slope\", \"adas_slope\"],\n",
+        "    dynamic_axes={\n",
+        "        \"x\": {0: \"batch\", 1: \"time\"},\n",
+        "        \"missing_mask\": {0: \"batch\", 1: \"time\"},\n",
+        "        \"attn_mask\": {0: \"batch\", 1: \"time\"},\n",
+        "        \"mmse12\": {0: \"batch\"},\n",
+        "        \"adas12\": {0: \"batch\"},\n",
+        "        \"conv12_logit\": {0: \"batch\"},\n",
+        "        \"mmse_slope\": {0: \"batch\"},\n",
+        "        \"adas_slope\": {0: \"batch\"}\n",
+        "    }\n",
+        ")\n",
+        "\n",
+        "print(\"ONNX 변환 완료:\", onnx_path)\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "oD3gkcuvXx3f",
+        "outputId": "18b9d339-3e4b-4491-ee14-94dea1b689d4"
+      },
+      "execution_count": 74,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "/tmp/ipython-input-720307644.py:3: UserWarning: # 'dynamic_axes' is not recommended when dynamo=True, and may lead to 'torch._dynamo.exc.UserError: Constraints violated.' Supply the 'dynamic_shapes' argument instead if export is unsuccessful.\n",
+            "  torch.onnx.export(\n",
+            "W1129 07:20:42.295000 759 torch/onnx/_internal/exporter/_compat.py:114] Setting ONNX exporter to use operator set version 18 because the requested opset_version 14 is a lower version than we have implementations for. Automatic version conversion will be performed, which may not be successful at converting to the requested version. If version conversion is unsuccessful, the opset version of the exported model will be kept at 18. Please consider setting opset_version >=18 to leverage latest ONNX features\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "[torch.onnx] Obtain model graph for `BaselineTransformer([...]` with `torch.export.export(..., strict=False)`...\n",
+            "[torch.onnx] Obtain model graph for `BaselineTransformer([...]` with `torch.export.export(..., strict=False)`... ✅\n",
+            "[torch.onnx] Run decomposition...\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "WARNING:onnxscript.version_converter:The model version conversion is not supported by the onnxscript version converter and fallback is enabled. The model will be converted using the onnx C API (target version: 14).\n",
+            "WARNING:onnxscript.version_converter:Failed to convert the model to the target version 14 using the ONNX C API. The model was not modified\n",
+            "Traceback (most recent call last):\n",
+            "  File \"/usr/local/lib/python3.12/dist-packages/onnxscript/version_converter/__init__.py\", line 127, in call\n",
+            "    converted_proto = _c_api_utils.call_onnx_api(\n",
+            "                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.12/dist-packages/onnxscript/version_converter/_c_api_utils.py\", line 65, in call_onnx_api\n",
+            "    result = func(proto)\n",
+            "             ^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.12/dist-packages/onnxscript/version_converter/__init__.py\", line 122, in _partial_convert_version\n",
+            "    return onnx.version_converter.convert_version(\n",
+            "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.12/dist-packages/onnx/version_converter.py\", line 39, in convert_version\n",
+            "    converted_model_str = C.convert_version(model_str, target_version)\n",
+            "                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "RuntimeError: /github/workspace/onnx/version_converter/adapters/no_previous_version.h:26: adapt: Assertion `false` failed: No Previous Version of LayerNormalization exists\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "[torch.onnx] Run decomposition... ✅\n",
+            "[torch.onnx] Translate the graph into ONNX...\n",
+            "[torch.onnx] Translate the graph into ONNX... ✅\n",
+            "Applied 28 of general pattern rewrite rules.\n",
+            "ONNX 변환 완료: /content/transformer_stable_best.onnx\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import onnxruntime as ort\n",
+        "import numpy as np\n",
+        "\n",
+        "session = ort.InferenceSession(onnx_path)\n",
+        "\n",
+        "outputs = session.run(\n",
+        "    None,\n",
+        "    {\n",
+        "        \"x\": dummy_x.cpu().numpy(),\n",
+        "        \"missing_mask\": dummy_m.cpu().numpy(),\n",
+        "        \"attn_mask\": dummy_attn.cpu().numpy()\n",
+        "    }\n",
+        ")\n",
+        "\n",
+        "print(outputs)\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "MLK1COAJX67C",
+        "outputId": "4c5344c7-c9fe-44be-dc7c-9f736c8e4e64"
+      },
+      "execution_count": 75,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "[array([[21.07722]], dtype=float32), array([[13.3503065]], dtype=float32), array([[-1.4379816]], dtype=float32), array([[-0.4718541]], dtype=float32), array([[0.05616096]], dtype=float32)]\n"
+          ]
+        }
+      ]
+    }
+  ]
+}
